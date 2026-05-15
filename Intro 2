@@ -1,0 +1,1384 @@
+I'll build you a complete MLOps Bootcamp Curriculum — module by module, with theory, hands-on practice, and code for every single step.
+
+---
+
+🎓 Complete MLOps Learning Path: Theory + Practice + Code
+
+Phase 0: Prerequisites (Weeks 1-2)
+
+Module 0.1: Python for MLOps
+Theory: You need Python scripting (not just notebooks), error handling, file I/O, and working with APIs.
+
+Practice + Code:
+
+```python
+# Exercise 1: Build a CLI data preprocessor
+import argparse
+import pandas as pd
+from pathlib import Path
+
+def preprocess(input_path: str, output_path: str):
+    df = pd.read_csv(input_path)
+    
+    # Handle missing values
+    df = df.fillna(df.median(numeric_only=True))
+    
+    # Save with metadata
+    metadata = {
+        "rows": len(df),
+        "columns": list(df.columns),
+        "missing_handled": True
+    }
+    
+    df.to_csv(output_path, index=False)
+    
+    # Write metadata as JSON
+    import json
+    with open(f"{output_path}.meta.json", "w") as f:
+        json.dump(metadata, f, indent=2)
+    
+    print(f"Processed {metadata['rows']} rows → {output_path}")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", required=True)
+    parser.add_argument("--output", required=True)
+    args = parser.parse_args()
+    preprocess(args.input, args.output)
+```
+
+Run it:
+
+```bash
+python preprocess.py --input raw_data.csv --output clean_data.csv
+```
+
+What you learn: CLI tools, argparse, pathlib, JSON metadata, reproducible scripts.
+
+---
+
+Module 0.2: Git & Linux Essentials
+Theory: Version control is the backbone of MLOps. You must commit code, branch, merge, and write shell scripts.
+
+Practice:
+
+```bash
+# Exercise: Create a proper project structure
+mkdir mlops-project && cd mlops-project
+git init
+
+# Create standard structure
+mkdir -p src/data src/models src/api tests configs notebooks
+
+# Add .gitignore
+cat > .gitignore << 'EOF'
+__pycache__/
+*.pyc
+.env
+data/raw/
+data/processed/
+models/*.pkl
+mlruns/
+EOF
+
+git add .
+git commit -m "Initial project structure"
+```
+
+Daily practice: Every piece of code you write from now on must be in a Git repo with meaningful commits.
+
+---
+
+Module 0.3: SQL for Data Extraction
+Theory: MLOps engineers extract training data from warehouses. Know joins, CTEs, window functions.
+
+Practice:
+
+```sql
+-- Exercise: Extract a training dataset with features + target
+WITH user_features AS (
+    SELECT 
+        user_id,
+        COUNT(DISTINCT order_id) as total_orders,
+        AVG(order_amount) as avg_order_value,
+        MAX(order_date) as last_order_date,
+        DATEDIFF(day, MAX(order_date), CURRENT_DATE) as days_since_last_order
+    FROM orders
+    WHERE order_date >= DATE_SUB(CURRENT_DATE, INTERVAL 1 YEAR)
+    GROUP BY user_id
+),
+user_target AS (
+    SELECT 
+        user_id,
+        CASE WHEN MAX(order_date) >= DATE_SUB(CURRENT_DATE, INTERVAL 30 DAY) 
+             THEN 1 ELSE 0 END as is_active_30d
+    FROM orders
+    GROUP BY user_id
+)
+SELECT f.*, t.is_active_30d
+FROM user_features f
+JOIN user_target t ON f.user_id = t.user_id;
+```
+
+---
+
+Phase 1: Core ML Pipeline (Weeks 3-5)
+
+Module 1.1: End-to-End ML Script (No MLOps Yet)
+Theory: Before automating, you must build a solid manual pipeline. This is your baseline.
+
+Practice + Code:
+
+```python
+# src/pipeline/train.py
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, f1_score, classification_report
+import joblib
+import json
+from pathlib import Path
+import yaml
+
+def load_config(config_path="configs/train_config.yaml"):
+    with open(config_path) as f:
+        return yaml.safe_load(f)
+
+def load_data(path):
+    df = pd.read_csv(path)
+    return df
+
+def feature_engineering(df):
+    # Example: create new features
+    df['feature_ratio'] = df['feature_a'] / (df['feature_b'] + 1e-6)
+    return df
+
+def train_model(X_train, y_train, config):
+    model = RandomForestClassifier(
+        n_estimators=config['n_estimators'],
+        max_depth=config['max_depth'],
+        random_state=config['random_state']
+    )
+    model.fit(X_train, y_train)
+    return model
+
+def evaluate_model(model, X_test, y_test):
+    preds = model.predict(X_test)
+    metrics = {
+        "accuracy": accuracy_score(y_test, preds),
+        "f1_score": f1_score(y_test, preds, average='weighted')
+    }
+    print(classification_report(y_test, preds))
+    return metrics
+
+def save_artifacts(model, metrics, output_dir="outputs"):
+    Path(output_dir).mkdir(exist_ok=True)
+    
+    # Save model
+    joblib.dump(model, f"{output_dir}/model.pkl")
+    
+    # Save metrics
+    with open(f"{output_dir}/metrics.json", "w") as f:
+        json.dump(metrics, f, indent=2)
+    
+    print(f"Artifacts saved to {output_dir}")
+
+def main():
+    config = load_config()
+    
+    # Load
+    df = load_data(config['data_path'])
+    
+    # Feature engineering
+    df = feature_engineering(df)
+    
+    # Split
+    X = df.drop(config['target_col'], axis=1)
+    y = df[config['target_col']]
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=config['test_size'], random_state=config['random_state']
+    )
+    
+    # Train
+    model = train_model(X_train, y_train, config)
+    
+    # Evaluate
+    metrics = evaluate_model(model, X_test, y_test)
+    
+    # Save
+    save_artifacts(model, metrics)
+
+if __name__ == "__main__":
+    main()
+```
+
+Config file (`configs/train_config.yaml`):
+
+```yaml
+data_path: "data/processed/train.csv"
+target_col: "target"
+test_size: 0.2
+random_state: 42
+n_estimators: 100
+max_depth: 10
+```
+
+What you learn: Structured code, config-driven development, artifact saving, separation of concerns.
+
+---
+
+Module 1.2: Data Validation
+Theory: Bad data silently kills models. You need schema validation, drift detection, and quality checks before training.
+
+Practice + Code:
+
+```python
+# src/data/validate.py
+import pandas as pd
+import pandera as pa
+from pandera import Column, Check, DataFrameSchema
+from pathlib import Path
+
+# Define expected schema
+schema = DataFrameSchema({
+    "feature_a": Column(float, Check.greater_than(0), nullable=False),
+    "feature_b": Column(float, nullable=False),
+    "feature_ratio": Column(float, nullable=True),
+    "target": Column(int, Check.isin([0, 1]), nullable=False)
+})
+
+def validate_data(df: pd.DataFrame) -> pd.DataFrame:
+    """Validate and return cleaned dataframe. Raises on failure."""
+    try:
+        validated = schema.validate(df)
+        print(f"✅ Validation passed: {len(validated)} rows")
+        return validated
+    except pa.errors.SchemaError as e:
+        print(f"❌ Validation failed:\n{e}")
+        raise
+
+def check_drift(reference_path: str, current_path: str, threshold: float = 0.1):
+    """Simple statistical drift check using KS test."""
+    from scipy import stats
+    
+    ref = pd.read_csv(reference_path)
+    cur = pd.read_csv(current_path)
+    
+    drift_detected = False
+    for col in ref.select_dtypes(include=[np.number]).columns:
+        if col in cur.columns:
+            stat, p_value = stats.ks_2samp(ref[col].dropna(), cur[col].dropna())
+            if p_value < threshold:
+                print(f"⚠️ Drift detected in {col}: p={p_value:.4f}")
+                drift_detected = True
+    
+    if not drift_detected:
+        print("✅ No significant drift detected")
+    
+    return drift_detected
+```
+
+What you learn: Schema validation, statistical testing, defensive programming.
+
+---
+
+Phase 2: Containerization & Reproducibility (Weeks 6-7)
+
+Module 2.1: Docker Fundamentals
+Theory: Containers ensure your code runs identically everywhere. In MLOps, this is non-negotiable.
+
+Practice + Code:
+
+```dockerfile
+# Dockerfile
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first (for layer caching)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy code
+COPY src/ ./src/
+COPY configs/ ./configs/
+
+# Set environment
+ENV PYTHONPATH=/app
+ENV MODEL_PATH=/app/models
+
+# Create output directory
+RUN mkdir -p /app/outputs
+
+# Default command
+CMD ["python", "src/pipeline/train.py"]
+```
+
+```txt
+# requirements.txt
+pandas==2.1.4
+scikit-learn==1.3.2
+numpy==1.26.2
+pyyaml==6.0.1
+joblib==1.3.2
+pandera==0.18.0
+scipy==1.11.4
+```
+
+Build & Run:
+
+```bash
+docker build -t mlops-training:latest .
+docker run -v $(pwd)/data:/app/data -v $(pwd)/outputs:/app/outputs mlops-training:latest
+```
+
+Exercise: Modify the Dockerfile to accept command-line arguments for different configs.
+
+---
+
+Module 2.2: Docker for Model Serving
+Theory: Models don't live in notebooks. They live in containers serving predictions via APIs.
+
+Practice + Code:
+
+```python
+# src/api/serve.py
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import joblib
+import numpy as np
+from pathlib import Path
+import uvicorn
+
+app = FastAPI(title="ML Model API", version="1.0")
+
+# Load model at startup
+MODEL_PATH = Path("outputs/model.pkl")
+model = None
+
+@app.on_event("startup")
+async def load_model():
+    global model
+    if MODEL_PATH.exists():
+        model = joblib.load(MODEL_PATH)
+        print(f"Loaded model from {MODEL_PATH}")
+    else:
+        raise FileNotFoundError(f"Model not found at {MODEL_PATH}")
+
+class PredictionRequest(BaseModel):
+    features: list[float]
+
+class PredictionResponse(BaseModel):
+    prediction: int
+    probability: float
+
+@app.post("/predict", response_model=PredictionResponse)
+async def predict(request: PredictionRequest):
+    if model is None:
+        raise HTTPException(status_code=503, detail="Model not loaded")
+    
+    features = np.array(request.features).reshape(1, -1)
+    pred = model.predict(features)[0]
+    prob = model.predict_proba(features)[0].max()
+    
+    return PredictionResponse(prediction=int(pred), probability=float(prob))
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy", "model_loaded": model is not None}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+Dockerfile for serving:
+
+```dockerfile
+FROM python:3.10-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY src/api/ ./src/api/
+COPY outputs/model.pkl ./outputs/
+EXPOSE 8000
+CMD ["python", "src/api/serve.py"]
+```
+
+Test it:
+
+```bash
+docker build -t mlops-api:latest -f Dockerfile.api .
+docker run -p 8000:8000 mlops-api:latest
+
+# In another terminal
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"features": [1.5, 2.3, 0.8]}'
+```
+
+---
+
+Phase 3: Experiment Tracking & Model Registry (Weeks 8-9)
+
+Module 3.1: MLflow Integration
+Theory: You can't improve what you don't measure. MLflow tracks experiments, parameters, metrics, and artifacts. The Model Registry manages model lifecycle (Staging → Production).
+
+Practice + Code:
+
+```python
+# src/pipeline/train_with_mlflow.py
+import mlflow
+import mlflow.sklearn
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
+import pandas as pd
+import yaml
+from pathlib import Path
+
+def train_with_tracking(config_path="configs/train_config.yaml"):
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
+    
+    # Set experiment
+    mlflow.set_experiment("churn-prediction")
+    
+    with mlflow.start_run(run_name=config.get('run_name', 'default')):
+        # Log parameters
+        mlflow.log_params({
+            "n_estimators": config['n_estimators'],
+            "max_depth": config['max_depth'],
+            "test_size": config['test_size']
+        })
+        
+        # Load and split
+        df = pd.read_csv(config['data_path'])
+        X = df.drop(config['target_col'], axis=1)
+        y = df[config['target_col']]
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=config['test_size'], random_state=config['random_state']
+        )
+        
+        # Train
+        model = RandomForestClassifier(
+            n_estimators=config['n_estimators'],
+            max_depth=config['max_depth'],
+            random_state=config['random_state']
+        )
+        model.fit(X_train, y_train)
+        
+        # Evaluate
+        preds = model.predict(X_test)
+        proba = model.predict_proba(X_test)[:, 1]
+        
+        metrics = {
+            "accuracy": accuracy_score(y_test, preds),
+            "f1_score": f1_score(y_test, preds, average='weighted'),
+            "roc_auc": roc_auc_score(y_test, proba)
+        }
+        
+        # Log metrics
+        mlflow.log_metrics(metrics)
+        
+        # Log model with signature
+        from mlflow.models.signature import infer_signature
+        signature = infer_signature(X_train, model.predict(X_train))
+        
+        mlflow.sklearn.log_model(
+            model, 
+            artifact_path="model",
+            signature=signature,
+            registered_model_name="churn-model"  # Auto-registers!
+        )
+        
+        # Log artifacts
+        mlflow.log_artifact(config_path)
+        
+        print(f"Run completed. Metrics: {metrics}")
+        return mlflow.active_run().info.run_id
+
+if __name__ == "__main__":
+    train_with_tracking()
+```
+
+Start MLflow UI:
+
+```bash
+mlflow ui --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns
+```
+
+Exercise: Run 5 experiments with different hyperparameters. Compare them in the MLflow UI. Promote the best to "Production" in the Model Registry.
+
+---
+
+Module 3.2: Data Version Control (DVC)
+Theory: Git doesn't handle large datasets. DVC versions data files using Git for metadata + remote storage (S3, GCS, Azure) for actual files.
+
+Practice + Code:
+
+```bash
+# Initialize DVC
+dvc init
+git commit -m "Initialize DVC"
+
+# Track a dataset
+dvc add data/processed/train.csv
+git add data/processed/train.csv.dvc .gitignore
+git commit -m "Add training data v1.0"
+
+# Simulate data update
+# (modify train.csv)
+dvc add data/processed/train.csv
+git add data/processed/train.csv.dvc
+git commit -m "Add training data v1.1"
+
+# View history
+git log --oneline
+dvc metrics show  # if you have metrics files tracked
+
+# Push to remote storage
+dvc remote add -d myremote s3://mybucket/dvcstore
+dvc push
+
+# Someone else pulls
+git pull
+dvc pull
+```
+
+Pipeline as Code (dvc.yaml):
+
+```yaml
+# dvc.yaml
+stages:
+  preprocess:
+    cmd: python src/data/preprocess.py --input data/raw/raw.csv --output data/processed/train.csv
+    deps:
+      - src/data/preprocess.py
+      - data/raw/raw.csv
+    outs:
+      - data/processed/train.csv
+  
+  train:
+    cmd: python src/pipeline/train_with_mlflow.py
+    deps:
+      - src/pipeline/train_with_mlflow.py
+      - data/processed/train.csv
+      - configs/train_config.yaml
+    outs:
+      - outputs/metrics.json:
+          cache: false
+    metrics:
+      - outputs/metrics.json:
+          cache: false
+```
+
+Run pipeline:
+
+```bash
+dvc repro  # Runs only changed stages
+```
+
+---
+
+Phase 4: CI/CD for ML (Weeks 10-12)
+
+Module 4.1: GitHub Actions for ML
+Theory: ML CI/CD is different from software CI/CD. You must test: code quality, data quality, model quality, and container builds.
+
+Practice + Code:
+
+```yaml
+# .github/workflows/ml-pipeline.yml
+name: ML Pipeline CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest black flake8
+      
+      - name: Lint
+        run: |
+          black --check src/
+          flake8 src/ --max-line-length=100
+      
+      - name: Unit tests
+        run: pytest tests/
+
+  data-validation:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Validate data
+        run: python src/data/validate.py --data data/processed/train.csv
+
+  train-and-evaluate:
+    runs-on: ubuntu-latest
+    needs: data-validation
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Train model
+        run: python src/pipeline/train_with_mlflow.py
+      
+      - name: Evaluate model
+        run: |
+          python -c "
+          import json
+          with open('outputs/metrics.json') as f:
+              metrics = json.load(f)
+          assert metrics['accuracy'] > 0.75, f'Accuracy too low: {metrics[\"accuracy\"]}'
+          print('Model quality check passed!')
+          "
+      
+      - name: Upload model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model
+          path: outputs/model.pkl
+
+  build-and-push-docker:
+    runs-on: ubuntu-latest
+    needs: train-and-evaluate
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download model
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-model
+          path: outputs/
+      
+      - name: Build Docker image
+        run: docker build -t mlops-api:${{ github.sha }} -f Dockerfile.api .
+      
+      - name: Push to registry (example)
+        run: |
+          echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+          docker tag mlops-api:${{ github.sha }} mlops-api:latest
+          docker push mlops-api:latest
+```
+
+What you learn: Multi-stage CI/CD, quality gates, artifact passing, conditional deployment.
+
+---
+
+Module 4.2: Model Testing Strategy
+Theory: ML testing = traditional tests + ML-specific tests. You need unit tests for code, data tests for quality, and model tests for behavior.
+
+Practice + Code:
+
+```python
+# tests/test_model.py
+import pytest
+import joblib
+import numpy as np
+from pathlib import Path
+
+MODEL_PATH = Path("outputs/model.pkl")
+
+@pytest.fixture
+def model():
+    if not MODEL_PATH.exists():
+        pytest.skip("Model not trained yet")
+    return joblib.load(MODEL_PATH)
+
+def test_model_file_exists():
+    assert MODEL_PATH.exists(), "Trained model artifact missing"
+
+def test_model_prediction_shape(model):
+    # Test with dummy input
+    X = np.random.rand(10, 4)  # 10 samples, 4 features
+    preds = model.predict(X)
+    assert len(preds) == 10
+    assert all(isinstance(p, (int, np.integer)) for p in preds)
+
+def test_model_probability_range(model):
+    X = np.random.rand(5, 4)
+    proba = model.predict_proba(X)
+    assert proba.shape == (5, 2)  # Binary classification
+    assert np.all(proba >= 0) and np.all(proba <= 1)
+    assert np.allclose(proba.sum(axis=1), 1.0)
+
+def test_model_robustness(model):
+    # Model should not crash on edge cases
+    X_zeros = np.zeros((1, 4))
+    X_ones = np.ones((1, 4)) * 1000
+    model.predict(X_zeros)
+    model.predict(X_ones)  # Should not raise
+
+# tests/test_data.py
+import pandas as pd
+import pytest
+from src.data.validate import schema
+
+def test_no_missing_target():
+    df = pd.read_csv("data/processed/train.csv")
+    assert df['target'].notna().all(), "Target column has missing values"
+
+def test_feature_ranges():
+    df = pd.read_csv("data/processed/train.csv")
+    assert (df['feature_a'] > 0).all(), "feature_a must be positive"
+```
+
+---
+
+Phase 5: Orchestration & Pipelines (Weeks 13-15)
+
+Module 5.1: Apache Airflow
+Theory: Airflow orchestrates complex workflows with dependencies, retries, scheduling, and monitoring. It's the industry standard for batch ML pipelines.
+
+Practice + Code:
+
+```python
+# dags/ml_training_dag.py
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from airflow.operators.bash import BashOperator
+from datetime import datetime, timedelta
+import sys
+from pathlib import Path
+
+# Add project to path
+sys.path.append(str(Path(__file__).parent.parent / "src"))
+
+default_args = {
+    'owner': 'mlops',
+    'depends_on_past': False,
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5),
+}
+
+with DAG(
+    'ml_training_pipeline',
+    default_args=default_args,
+    description='End-to-end ML training pipeline',
+    schedule_interval=timedelta(days=1),  # Run daily
+    start_date=datetime(2024, 1, 1),
+    catchup=False,
+    tags=['ml', 'training'],
+) as dag:
+
+    def validate_data_task():
+        from data.validate import validate_data
+        df = validate_data("data/processed/train.csv")
+        return f"Validated {len(df)} rows"
+
+    def train_model_task():
+        from pipeline.train_with_mlflow import train_with_tracking
+        run_id = train_with_tracking()
+        return f"Training completed. Run ID: {run_id}"
+
+    def check_metrics_task():
+        import json
+        with open("outputs/metrics.json") as f:
+            metrics = json.load(f)
+        if metrics['accuracy'] < 0.75:
+            raise ValueError(f"Accuracy {metrics['accuracy']} below threshold")
+        return "Metrics check passed"
+
+    validate = PythonOperator(
+        task_id='validate_data',
+        python_callable=validate_data_task,
+    )
+
+    train = PythonOperator(
+        task_id='train_model',
+        python_callable=train_model_task,
+    )
+
+    check_metrics = PythonOperator(
+        task_id='check_metrics',
+        python_callable=check_metrics_task,
+    )
+
+    notify = BashOperator(
+        task_id='notify_success',
+        bash_command='echo "Pipeline completed successfully at $(date)"',
+    )
+
+    # Dependencies
+    validate >> train >> check_metrics >> notify
+```
+
+Run Airflow locally:
+
+```bash
+# Using Docker Compose (official)
+curl -LfO 'https://airflow.apache.org/docs/apache-airflow/stable/docker-compose.yaml'
+docker-compose up airflow-init
+docker-compose up
+```
+
+---
+
+Module 5.2: Kubeflow Pipelines (Cloud-Native)
+Theory: Kubeflow runs on Kubernetes and is designed specifically for ML workflows at scale.
+
+Practice: Deploy a simple pipeline on a local K3s/minikube cluster. This is advanced — attempt after mastering Airflow.
+
+---
+
+Phase 6: Model Serving & Deployment (Weeks 16-18)
+
+Module 6.1: FastAPI + Gunicorn Production Setup
+Theory: Development servers (uvicorn single-worker) are not for production. You need multiple workers, health checks, and proper logging.
+
+Practice + Code:
+
+```python
+# src/api/serve_production.py
+import os
+from fastapi import FastAPI
+import joblib
+from pydantic import BaseModel
+import numpy as np
+import logging
+from pathlib import Path
+
+# Logging configuration
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(title="Production ML API")
+
+# Load model from env var or default
+MODEL_PATH = Path(os.getenv("MODEL_PATH", "outputs/model.pkl"))
+model = None
+
+@app.on_event("startup")
+async def startup_event():
+    global model
+    logger.info(f"Loading model from {MODEL_PATH}")
+    if not MODEL_PATH.exists():
+        raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
+    model = joblib.load(MODEL_PATH)
+    logger.info("Model loaded successfully")
+
+class PredictRequest(BaseModel):
+    features: list[float]
+
+class PredictResponse(BaseModel):
+    prediction: int
+    confidence: float
+    model_version: str
+
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "model_loaded": model is not None,
+        "model_path": str(MODEL_PATH)
+    }
+
+@app.post("/predict", response_model=PredictResponse)
+async def predict(request: PredictRequest):
+    if model is None:
+        raise HTTPException(status_code=503, detail="Model not available")
+    
+    X = np.array(request.features).reshape(1, -1)
+    pred = int(model.predict(X)[0])
+    proba = float(model.predict_proba(X)[0].max())
+    
+    logger.info(f"Prediction: {pred}, Confidence: {proba:.4f}")
+    
+    return PredictResponse(
+        prediction=pred,
+        confidence=proba,
+        model_version=os.getenv("MODEL_VERSION", "1.0.0")
+    )
+```
+
+Gunicorn configuration (`gunicorn.conf.py`):
+
+```python
+import multiprocessing
+
+bind = "0.0.0.0:8000"
+workers = multiprocessing.cpu_count() * 2 + 1
+worker_class = "uvicorn.workers.UvicornWorker"
+timeout = 120
+keepalive = 5
+errorlog = "-"
+accesslog = "-"
+```
+
+Run:
+
+```bash
+gunicorn -c gunicorn.conf.py src.api.serve_production:app
+```
+
+---
+
+Module 6.2: Kubernetes Deployment
+Theory: Kubernetes manages containerized applications at scale: auto-scaling, rolling updates, self-healing.
+
+Practice + Code:
+
+```yaml
+# k8s/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-api
+  labels:
+    app: ml-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ml-api
+  template:
+    metadata:
+      labels:
+        app: ml-api
+    spec:
+      containers:
+      - name: api
+        image: mlops-api:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: MODEL_PATH
+          value: "/app/models/model.pkl"
+        - name: MODEL_VERSION
+          value: "2.1.0"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-api-service
+spec:
+  selector:
+    app: ml-api
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: LoadBalancer
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ml-api-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ml-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+```
+
+Deploy:
+
+```bash
+kubectl apply -f k8s/deployment.yaml
+kubectl get pods
+kubectl get svc
+```
+
+---
+
+Phase 7: Monitoring & Observability (Weeks 19-21)
+
+Module 7.1: Model Monitoring with Evidently AI
+Theory: Models degrade in production. You must monitor: data drift, prediction drift, performance degradation, and business metrics.
+
+Practice + Code:
+
+```python
+# src/monitoring/monitor.py
+import pandas as pd
+import numpy as np
+from evidently import ColumnMapping
+from evidently.report import Report
+from evidently.metric_preset import DataDriftPreset, TargetDriftPreset, RegressionPreset
+from pathlib import Path
+import json
+from datetime import datetime
+
+def generate_monitoring_report(
+    reference_path: str,
+    current_path: str,
+    output_dir: str = "monitoring_reports"
+):
+    """Generate drift report comparing reference vs current data."""
+    
+    reference = pd.read_csv(reference_path)
+    current = pd.read_csv(current_path)
+    
+    # Column mapping
+    column_mapping = ColumnMapping()
+    column_mapping.target = 'target'
+    column_mapping.prediction = 'prediction'
+    
+    # Build report
+    report = Report(metrics=[
+        DataDriftPreset(),
+        TargetDriftPreset(),
+    ])
+    
+    report.run(
+        reference_data=reference,
+        current_data=current,
+        column_mapping=column_mapping
+    )
+    
+    # Save HTML report
+    Path(output_dir).mkdir(exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    report_path = f"{output_dir}/drift_report_{timestamp}.html"
+    report.save_html(report_path)
+    
+    # Extract key metrics for alerting
+    drift_metrics = {
+        "timestamp": timestamp,
+        "dataset_drift": report.as_dict()['metrics'][0]['result']['dataset_drift'],
+        "number_of_drifted_columns": report.as_dict()['metrics'][0]['result']['number_of_drifted_columns'],
+        "drift_share": report.as_dict()['metrics'][0]['result']['drift_share']
+    }
+    
+    # Save metrics JSON
+    metrics_path = f"{output_dir}/drift_metrics_{timestamp}.json"
+    with open(metrics_path, "w") as f:
+        json.dump(drift_metrics, f, indent=2)
+    
+    print(f"Report saved: {report_path}")
+    print(f"Drift detected: {drift_metrics['dataset_drift']}")
+    
+    return drift_metrics
+
+def check_drift_alert(metrics: dict, threshold: float = 0.5):
+    """Trigger alert if drift exceeds threshold."""
+    if metrics['drift_share'] > threshold:
+        print(f"🚨 ALERT: Drift share {metrics['drift_share']:.2%} exceeds threshold {threshold:.2%}")
+        # Here you would send Slack/email alert
+        return True
+    print(f"✅ Drift within acceptable range: {metrics['drift_share']:.2%}")
+    return False
+
+if __name__ == "__main__":
+    metrics = generate_monitoring_report(
+        reference_path="data/reference/reference_data.csv",
+        current_path="data/current/production_data.csv"
+    )
+    check_drift_alert(metrics)
+```
+
+Exercise: Set up a cron job or Airflow task to run this daily. Integrate with Prometheus metrics exporter.
+
+---
+
+Module 7.2: Prometheus + Grafana Dashboard
+Theory: System metrics (latency, throughput, errors) complement ML metrics. Prometheus scrapes metrics; Grafana visualizes them.
+
+Practice + Code:
+
+```python
+# src/monitoring/metrics_exporter.py
+from prometheus_client import Counter, Histogram, Gauge, start_http_server
+import time
+from functools import wraps
+
+# Define metrics
+PREDICTION_COUNTER = Counter('ml_predictions_total', 'Total predictions', ['model_version'])
+PREDICTION_LATENCY = Histogram('ml_prediction_latency_seconds', 'Prediction latency')
+MODEL_DRIFT_SCORE = Gauge('ml_drift_score', 'Current drift score')
+
+def track_prediction(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        result = func(*args, **kwargs)
+        latency = time.time() - start
+        
+        PREDICTION_LATENCY.observe(latency)
+        PREDICTION_COUNTER.labels(model_version="2.1.0").inc()
+        
+        return result
+    return wrapper
+
+# Start metrics server on port 9090
+if __name__ == "__main__":
+    start_http_server(9090)
+    print("Metrics server running on port 9090")
+    while True:
+        time.sleep(1)
+```
+
+Prometheus config (`prometheus.yml`):
+
+```yaml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'ml-api'
+    static_configs:
+      - targets: ['ml-api:8000']
+  - job_name: 'ml-metrics'
+    static_configs:
+      - targets: ['ml-metrics:9090']
+```
+
+---
+
+Phase 8: Cloud MLOps & Feature Stores (Weeks 22-24)
+
+Module 8.1: AWS SageMaker (or GCP Vertex AI / Azure ML)
+Theory: Cloud platforms provide managed infrastructure for training, deployment, and monitoring. Pick one cloud and master it.
+
+Practice: Deploy your Docker container to SageMaker:
+1. Push image to ECR
+2. Create SageMaker model from image
+3. Deploy to SageMaker endpoint
+4. Configure auto-scaling
+
+AWS CLI commands:
+
+```bash
+# Build and push to ECR
+aws ecr get-login-password | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
+docker build -t mlops-api .
+docker tag mlops-api:latest $AWS_ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/mlops-api:latest
+docker push $AWS_ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/mlops-api:latest
+
+# Deploy (using boto3 in Python or AWS CLI)
+```
+
+---
+
+Module 8.2: Feature Store (Feast)
+Theory: Feature stores solve the "training-serving skew" problem by providing the same feature computation logic for both batch training and real-time serving.
+
+Practice + Code:
+
+```python
+# feature_repo/example_repo.py
+from feast import Entity, Feature, FeatureView, ValueType, FileSource
+from feast.types import Float32, Int64
+from datetime import timedelta
+
+# Define entity
+user = Entity(
+    name="user_id",
+    value_type=ValueType.INT64,
+    description="User ID"
+)
+
+# Define data source
+user_stats_source = FileSource(
+    path="data/user_stats.parquet",
+    event_timestamp_column="event_timestamp"
+)
+
+# Define feature view
+user_stats_view = FeatureView(
+    name="user_stats",
+    entities=["user_id"],
+    ttl=timedelta(days=1),
+    features=[
+        Feature(name="total_orders", dtype=Int64),
+        Feature(name="avg_order_value", dtype=Float32),
+        Feature(name="days_since_last_order", dtype=Int64),
+    ],
+    online=True,
+    source=user_stats_source,
+)
+
+# Fetch features for inference
+from feast import FeatureStore
+
+store = FeatureStore(repo_path="feature_repo")
+
+feature_vector = store.get_online_features(
+    features=[
+        "user_stats:total_orders",
+        "user_stats:avg_order_value",
+        "user_stats:days_since_last_order"
+    ],
+    entity_rows=[{"user_id": 12345}]
+).to_dict()
+
+print(feature_vector)
+```
+
+---
+
+Phase 9: Capstone Project (Weeks 25-28)
+
+🏆 End-to-End MLOps Project
+Build a complete system that demonstrates everything you've learned:
+
+Project: Customer Churn Prediction System
+
+```
+churn-mlops/
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yml          # CI/CD pipeline
+├── configs/
+│   ├── train_config.yaml      # Training config
+│   └── serve_config.yaml      # Serving config
+├── data/
+│   ├── raw/                   # Gitignored, tracked by DVC
+│   ├── processed/             # Gitignored, tracked by DVC
+│   └── reference/             # Reference data for drift
+├── dags/
+│   └── training_dag.py        # Airflow DAG
+├── dvc.yaml                   # DVC pipeline
+├── feature_repo/              # Feast feature definitions
+├── k8s/
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   └── hpa.yaml
+├── monitoring_reports/        # Generated drift reports
+├── notebooks/
+│   └── eda.ipynb             # Initial exploration
+├── outputs/
+│   ├── model.pkl
+│   └── metrics.json
+├── src/
+│   ├── api/
+│   │   └── serve.py          # FastAPI app
+│   ├── data/
+│   │   ├── preprocess.py
+│   │   └── validate.py
+│   ├── models/
+│   │   └── train.py
+│   ├── monitoring/
+│   │   └── monitor.py
+│   └── pipeline/
+│       └── train_with_mlflow.py
+├── tests/
+│   ├── test_api.py
+│   ├── test_data.py
+│   └── test_model.py
+├── Dockerfile                 # Training container
+├── Dockerfile.api             # Serving container
+├── docker-compose.yml         # Local stack
+├── gunicorn.conf.py
+├── prometheus.yml
+├── requirements.txt
+└── README.md                  # Documentation
+```
+
+What it does:
+1. Data ingestion → DVC versioned
+2. Validation → Pandera schema checks
+3. Feature engineering → Feast feature store
+4. Training → MLflow tracking + Model Registry
+5. Evaluation → Automated quality gates
+6. CI/CD → GitHub Actions: lint → test → validate → train → build → deploy
+7. Serving → FastAPI + Gunicorn in Docker
+8. Deployment → Kubernetes with HPA
+9. Monitoring → Evidently drift detection + Prometheus metrics + Grafana dashboard
+10. Retraining → Airflow DAG triggered on drift detection
+
+---
+
+📚 Recommended Learning Resources
+
+Topic	Resource	Type	
+Docker	Docker Mastery course (Udemy)	Course	
+Kubernetes	Kubernetes for the Absolute Beginners	Course	
+MLflow	MLflow official docs + tutorials	Docs	
+Airflow	Airflow Fundamentals (Astronomer)	Course	
+FastAPI	FastAPI official tutorial	Docs	
+Monitoring	Evidently AI tutorials	Blog/Docs	
+Feature Stores	Feast documentation	Docs	
+LLMOps	MLOps Community YouTube	Videos	
+
+---
+
+✅ Weekly Checklist (Print This!)
+
+Every week, you should be able to:
+- Explain the theory to someone else
+- Write the code from scratch without copy-pasting
+- Debug errors independently
+- Git commit your work with meaningful messages
+- Build and run Docker containers
+- Write at least one test
+
+---
+
+Would you like me to:
+1. Expand any specific module with more code and exercises?
+2. Create a dataset + full working project you can clone and run?
+3. Generate interview questions mapped to each phase?
+4. Build a study schedule with daily 2-hour blocks?
