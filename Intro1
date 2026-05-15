@@ -1,0 +1,185 @@
+I'll help you prepare for MLOps. Let me search for the most current and comprehensive resources on MLOps preparation, interview questions, and practical skills.
+I'll help you prepare for MLOps comprehensively. Let me create a structured preparation guide covering all the key areas you'll need.
+
+---
+
+🚀 MLOps Preparation Guide
+
+1. Core Foundations You Must Master
+
+Programming & Environment
+- Python (non-negotiable): Scripting, data structures, error handling, building CLI tools
+- Bash & Linux: Navigating directories, managing files, reading logs, writing shell scripts
+- Git & Version Control: Branching, commits, PRs — GitOps is becoming the standard for deployment automation
+- SQL: Joins, filters, aggregations for extracting datasets and validating data quality
+
+ML Fundamentals
+You don't need deep math, but you must understand:
+- Train/test/validation splits, overfitting/underfitting
+- Hyperparameters, evaluation metrics (accuracy, precision, recall, F1, AUC-ROC)
+- Core libraries: Scikit-learn, TensorFlow/PyTorch, XGBoost/LightGBM
+
+---
+
+2. MLOps-Specific Skills & Tools
+
+Containerization & Orchestration
+
+Tool	What You Need to Know	Importance	
+Docker	Build images, package models, guarantee reproducibility	⭐⭐⭐⭐⭐	
+Kubernetes	Pods, deployments, scaling, config maps, inference workloads	⭐⭐⭐⭐	
+
+Experiment Tracking & Model Management
+- MLflow: The open-source standard for tracking runs, model registry, and packaging
+- Weights & Biases (W&B): Strong for collaboration and hyperparameter search
+- DVC: Data version control — versions datasets alongside code commits
+
+CI/CD for ML
+ML CI/CD is fundamentally different from software CI/CD. Key differences:
+- What changes: Code + data + model weights (not just code)
+- Tests: Add model quality tests + data quality tests
+- Artifacts: Docker image + model weights + config
+- Rollback triggers: Metric degradation, data drift (not just errors)
+
+Pipeline Architecture:
+
+```
+Code Change → Linting + Unit Tests → Data Validation → Model Training 
+→ Model Evaluation (offline metrics + regression tests + fairness checks) 
+→ Model Registry → Staging Deployment → Canary (5% traffic) → Full Rollout
+```
+
+Monitoring & Drift Detection
+Three Types of Drift you must know:
+1. Data Drift (Covariate Shift): Input distribution changes (e.g., model trained on US English gets Spanish queries)
+2. Concept Drift: Relationship between inputs and outputs changes (e.g., holiday season shifts recommendations)
+3. Model Performance Drift: Accuracy degrades even without data drift
+
+Monitoring Stack:
+- Evidently AI / WhyLabs: Drift detection
+- Prometheus + Grafana: System metrics (latency, error rates)
+- Arize / Fiddler: ML-specific observability
+
+---
+
+3. Top MLOps Tools to Learn in 2026
+
+Category	Tools	
+Experiment Tracking	MLflow, Weights & Biases, Neptune.ai, ClearML	
+Data Versioning	DVC, LakeFS, Delta Lake	
+Pipelines & Orchestration	Apache Airflow, Prefect, Kubeflow Pipelines, Dagster	
+Model Serving	FastAPI, BentoML, vLLM, TGI, Triton, TensorRT-LLM	
+Feature Store	Feast, Tecton, Vertex AI Feature Store	
+Cloud Platforms	AWS SageMaker, Google Vertex AI, Azure Machine Learning	
+Infrastructure	Terraform, Kubernetes, Docker	
+
+---
+
+4. Critical Interview Topics (2026)
+
+Q1: Design a CI/CD Pipeline for ML Models
+Key talking points:
+- Data versioning (DVC) is as important as code versioning
+- Model registry tracks lineage: data + code + hyperparameters
+- Canary deployment: Route 5% traffic to new model, auto-rollback if metrics degrade
+- Shadow deployment: Run new model in parallel, log predictions but serve old model's predictions
+
+Q2: How Do You Monitor Models in Production?
+Key talking points:
+- "The most dangerous drift is silent drift — high confidence but wrong outputs"
+- Set up two types of alerts: statistical (distribution shifted >X%) and business (conversion dropped >Y%)
+- Monitor: feature distributions, prediction distributions, latency (p50, p95, p99), error rates, business metrics
+
+Q3: Explain Model Serving Infrastructure
+Stack to know:
+
+```
+API Gateway → Load Balancer → Serving Framework (vLLM/TGI/TensorRT-LLM) 
+→ GPU Inference → Response Streaming
+```
+
+Auto-scaling strategy:
+- Scale on GPU utilization + request queue depth (not CPU)
+- Scale-up: queue depth > threshold for >30 seconds
+- Scale-down: GPU utilization <20% for >5 minutes
+- Minimum replicas: Always keep 1+ warm (cold start = 30-120 seconds)
+
+Q4: Quantization for LLM Deployment
+- INT8: Nearly lossless, sweet spot for production
+- INT4: Degrades quality 1-3% but halves memory
+- FP8 (E4M3/E5M2): Emerging standard on H100s with native hardware support
+- AWQ > GPTQ in most benchmarks (protects salient weights)
+
+Q5: Continuous Batching for LLM Serving
+- Static Batching: All requests wait for longest request → GPU idle 50-70% of time
+- Continuous Batching: New request takes slot as soon as one finishes → GPU utilization 80-95%, 2-3x throughput
+
+---
+
+5. Practical Projects for Your Portfolio
+
+Beginner Projects
+1. Data Versioning with DVC: Create dataset folder, version with DVC, track preprocessing, push/pull data
+2. Experiment Tracking with MLflow: Train simple model, log metrics, compare experiments, register best model
+3. Containerize a Model with Docker: Create Dockerfile, add Python environment, expose endpoint, run locally
+4. Deploy with FastAPI: Build small FastAPI app, load trained model, return predictions
+
+Intermediate Projects
+1. End-to-End Training Pipeline (Airflow/Prefect): Load → Preprocess → Train → Evaluate → Store artifacts
+2. CI/CD for ML using GitHub Actions: Code linting, unit tests, Docker builds, model validation, auto-deployment
+3. Model Monitoring + Drift Detection: Use EvidentlyAI + Prometheus + Grafana for input/output monitoring
+
+Advanced Portfolio Project (Highly Recommended)
+Build a complete system including:
+- Data ingestion + versioning (DVC)
+- Training pipeline + experiment tracking (MLflow)
+- Dockerized model + FastAPI endpoint
+- CI/CD deployment (GitHub Actions)
+- Monitoring dashboard + drift detection (EvidentlyAI + Grafana)
+- Automated retraining pipeline
+
+Bonus: LLMOps/RAG Project (2026 Trend)
+- Embedding generation + vector database (Pinecone/FAISS)
+- RAG-based answer generation
+- Logging hallucination rates
+- Monitoring vector recall
+- Deploying via BentoML
+
+---
+
+6. 24-Week Learning Roadmap
+
+Weeks	Focus	Outcomes	
+1-4	Python, Git, statistics, ML basics	Data cleaning + EDA project	
+5-8	Docker, FastAPI, CI/CD	Containerized model API + GitHub Actions pipeline	
+9-12	Experiment tracking, model registry, data versioning	MLflow runs + DVC lineage	
+13-16	Monitoring and drift, cost-aware serving	Evidently dashboards + canary deploy	
+17-20	Orchestration and cloud	Airflow/Kubeflow pipeline on cloud	
+21-24	LLMOps, RAG, governance	RAG prototype with evaluation	
+
+---
+
+7. Key Best Practices to Memorize
+
+1. Version Everything: Code (Git), data (DVC), models (MLflow), features (Feature Store)
+2. Make Every Experiment Reproducible: Log code commit, data version, hyperparameters, environment info
+3. Infrastructure as Code: Use Terraform/CloudFormation — rebuild your ML stack in minutes
+4. Plan for Retraining: Define time-based (weekly/monthly) or event-based (drift detection) triggers
+5. Build Evaluation Gates: Every pipeline stage needs go/no-go decisions
+6. Cost Optimization: Use spot/preemptible instances for training (3-5x cheaper), right-size GPU instances for serving
+
+---
+
+8. Quick Reference: MLOps vs DevOps vs ML Engineering
+
+Role	Focus	
+ML Engineer	Builds models	
+MLOps Engineer	Deploys, monitors, maintains models	
+DevOps Engineer	Software deployment and infrastructure	
+Data Engineer	Data pipelines and infrastructure	
+
+MLOps = ML + DevOps + Data Engineering — you sit at the intersection of all three.
+
+---
+
+Would you like me to dive deeper into any specific area — such as designing a specific pipeline, preparing for a particular company's interview, or building a hands-on project?
